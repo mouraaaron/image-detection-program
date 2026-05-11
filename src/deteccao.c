@@ -1,48 +1,52 @@
 #include <stdio.h>
-#include "deteccao.h"   
+#include <stdlib.h>
+#include <string.h>
+#include "deteccao.h"
 #include "fila.h"
 #include "funcoes_aux.h"
 
 
-int floodFill(Imagem *img, int **rotulos, int linhaInicial, int colunaInicial, int id)
+int floodFill(Imagem *img, int **rotulos, int linhaInicial, int colunaInicial, int id,
+              int *minLinha, int *maxLinha, int *minColuna, int *maxColuna)
 {
     int limiar = img->valorMax / 2;
     int area   = 0;
 
-    // a fila precisa comportar no máximo todos os pixels da imagem
+    *minLinha  = linhaInicial;
+    *maxLinha  = linhaInicial;
+    *minColuna = colunaInicial;
+    *maxColuna = colunaInicial;
+
     Fila *fila = criarFila(img->altura * img->largura);
     enfileirar(fila, linhaInicial, colunaInicial);
     rotulos[linhaInicial][colunaInicial] = id;
 
-    // direções: cima, baixo, esquerda, direita
-    int direcaoLinha[]   = {-1, 1,  0, 0};
-    int direcaoColuna[]  = { 0, 0, -1, 1};
+    int direcaoLinha[]  = {-1, 1,  0, 0};
+    int direcaoColuna[] = { 0, 0, -1, 1};
 
-    while(!filaVazia(fila))
+    while (!filaVazia(fila))
     {
         int linha, coluna;
         desenfileirar(fila, &linha, &coluna);
         area++;
 
-        // verifica os 4 vizinhos
-        for(int d = 0; d < 4; d++)
+        if (linha  < *minLinha)  *minLinha  = linha;
+        if (linha  > *maxLinha)  *maxLinha  = linha;
+        if (coluna < *minColuna) *minColuna = coluna;
+        if (coluna > *maxColuna) *maxColuna = coluna;
+
+        for (int d = 0; d < 4; d++)
         {
-            int vizinhoLinha  = linha  + direcaoLinha[d];
-            int vizinhoColuna = coluna + direcaoColuna[d];
+            int vl = linha  + direcaoLinha[d];
+            int vc = coluna + direcaoColuna[d];
 
-            // checa se está dentro da imagem
-            if(vizinhoLinha < 0 || vizinhoLinha >= img->altura)  continue;
-            if(vizinhoColuna < 0 || vizinhoColuna >= img->largura) continue;
+            if (vl < 0 || vl >= img->altura)  continue;
+            if (vc < 0 || vc >= img->largura) continue;
+            if (rotulos[vl][vc] != 0)         continue;
+            if (img->pixels[vl][vc] > limiar) continue;
 
-            // checa se já foi visitado
-            if(rotulos[vizinhoLinha][vizinhoColuna] != 0) continue;
-
-            // checa se é pixel de objeto (escuro)
-            if(img->pixels[vizinhoLinha][vizinhoColuna] > limiar) continue;
-
-            // marca e enfileira
-            rotulos[vizinhoLinha][vizinhoColuna] = id;
-            enfileirar(fila, vizinhoLinha, vizinhoColuna);
+            rotulos[vl][vc] = id;
+            enfileirar(fila, vl, vc);
         }
     }
 
@@ -50,43 +54,101 @@ int floodFill(Imagem *img, int **rotulos, int linhaInicial, int colunaInicial, i
     return area;
 }
 
+static int **criarMascara(int **rotulos, int id,
+                           int minL, int maxL, int minC, int maxC)
+{
+    int h = maxL - minL + 1;
+    int w = maxC - minC + 1;
+    int **m = malloc(h * sizeof(int *));
+    for (int r = 0; r < h; r++)
+    {
+        m[r] = malloc(w * sizeof(int));
+        for (int c = 0; c < w; c++)
+            m[r][c] = (rotulos[minL + r][minC + c] == id) ? 1 : 0;
+    }
+    return m;
+}
+
+static void liberarMascara(int **mascara, int altura)
+{
+    for (int i = 0; i < altura; i++)
+        free(mascara[i]);
+    free(mascara);
+}
+
+static int objetosIguais(Objeto *a, Objeto *b)
+{
+    if (a->larguraBBox != b->larguraBBox) return 0;
+    if (a->alturaBBox  != b->alturaBBox)  return 0;
+    for (int r = 0; r < a->alturaBBox; r++)
+        for (int c = 0; c < a->larguraBBox; c++)
+            if (a->mascara[r][c] != b->mascara[r][c]) return 0;
+    return 1;
+}
+
 Deteccao *detectarObjetos(Imagem *img)
 {
     Deteccao *det = malloc(sizeof(Deteccao));
     det->totalObjetos = 0;
 
-    // aloca a matriz de rótulos (começa tudo zerado = fundo)
     det->rotulos = malloc(img->altura * sizeof(int *));
-    for(int i = 0; i < img->altura; i++)
+    for (int i = 0; i < img->altura; i++)
     {
         det->rotulos[i] = malloc(img->largura * sizeof(int));
-        for(int j = 0; j < img->largura; j++)
+        for (int j = 0; j < img->largura; j++)
             det->rotulos[i][j] = 0;
     }
 
-    // aloca lista de objetos (no máximo um por pixel, na prática bem menos)
     det->objetos = malloc(img->altura * img->largura * sizeof(Objeto));
 
     int limiar = img->valorMax / 2;
 
-    // varre a imagem de cima pra baixo, esquerda pra direita
-    for(int i = 0; i < img->altura; i++)
+    for (int i = 0; i < img->altura; i++)
     {
-        for(int j = 0; j < img->largura; j++)
+        for (int j = 0; j < img->largura; j++)
         {
-            // pixel escuro e ainda não visitado = novo objeto
-            if(img->pixels[i][j] <= limiar && det->rotulos[i][j] == 0)
+            if (img->pixels[i][j] <= limiar && det->rotulos[i][j] == 0)
             {
                 int id = det->totalObjetos + 1;
-                int area = floodFill(img, det->rotulos, i, j, id);
+                int minL, maxL, minC, maxC;
+                int area = floodFill(img, det->rotulos, i, j, id,
+                                     &minL, &maxL, &minC, &maxC);
 
-                det->objetos[det->totalObjetos].id   = id;
-                det->objetos[det->totalObjetos].x    = j;  // coluna = x
-                det->objetos[det->totalObjetos].y    = i;  // linha  = y
-                det->objetos[det->totalObjetos].area = area;
+                Objeto *obj = &det->objetos[det->totalObjetos];
+                obj->id         = id;
+                obj->x          = j;
+                obj->y          = i;
+                obj->area       = (float)area;
+                obj->minLinha   = minL;
+                obj->maxLinha   = maxL;
+                obj->minColuna  = minC;
+                obj->maxColuna  = maxC;
+                obj->alturaBBox = maxL - minL + 1;
+                obj->larguraBBox= maxC - minC + 1;
+                obj->mascara    = criarMascara(det->rotulos, id, minL, maxL, minC, maxC);
+
                 det->totalObjetos++;
             }
         }
+    }
+
+    /* atribui índice de cor: objetos com mesma forma recebem o mesmo índice */
+    det->corDoObjeto = malloc(det->totalObjetos * sizeof(int));
+    for (int i = 0; i < det->totalObjetos; i++)
+        det->corDoObjeto[i] = -1;
+
+    int proximaCor = 0;
+    for (int i = 0; i < det->totalObjetos; i++)
+    {
+        if (det->corDoObjeto[i] != -1) continue;
+        det->corDoObjeto[i] = proximaCor;
+        for (int j = i + 1; j < det->totalObjetos; j++)
+        {
+            if (det->corDoObjeto[j] == -1 &&
+                objetosIguais(&det->objetos[i], &det->objetos[j]))
+                det->corDoObjeto[j] = proximaCor;
+        }
+        proximaCor++;
     }
 
     return det;
@@ -94,58 +156,58 @@ Deteccao *detectarObjetos(Imagem *img)
 
 void liberarDeteccao(Deteccao *det, int altura)
 {
-    for(int i = 0; i < altura; i++)
+    for (int i = 0; i < altura; i++)
         free(det->rotulos[i]);
     free(det->rotulos);
+
+    for (int i = 0; i < det->totalObjetos; i++)
+        liberarMascara(det->objetos[i].mascara, det->objetos[i].alturaBBox);
+
     free(det->objetos);
+    free(det->corDoObjeto);
     free(det);
 }
 
 static int cores[][3] = {
-    {255,   0,   0},   // vermelho
-    {  0, 255,   0},   // verde
-    {  0,   0, 255},   // azul
-    {255, 255,   0},   // amarelo
-    {255,   0, 255},   // magenta
-    {  0, 255, 255},   // ciano
+    {220,  20,  20},   // vermelho escuro
+    {  0, 180,   0},   // verde
+    {  0,   0, 220},   // azul
+    {220, 220,   0},   // amarelo
+    {220,   0, 220},   // magenta
+    {  0, 200, 200},   // ciano
     {255, 128,   0},   // laranja
     {128,   0, 255},   // roxo
 };
-int totalCores = 8;
+static int totalCores = 8;
 
 void gerarImagemSaida(Imagem *img, Deteccao *det, const char *nomeArquivo)
 {
     FILE *arquivo = fopen(nomeArquivo, "wb");
-    if(!arquivo)
+    if (!arquivo)
     {
         fprintf(stderr, "Erro ao criar arquivo de saida.\n");
         return;
     }
 
-    // cabeçalho PPM
     fprintf(arquivo, "P6\n%d %d\n255\n", img->largura, img->altura);
 
-    // percorre a matriz de rótulos e escreve as cores
-    for(int i = 0; i < img->altura; i++)
+    for (int i = 0; i < img->altura; i++)
     {
-        for(int j = 0; j < img->largura; j++)
+        for (int j = 0; j < img->largura; j++)
         {
             int rotulo = det->rotulos[i][j];
-
-            if(rotulo == 0)
+            if (rotulo == 0)
             {
-                // fundo pintado de branco
                 unsigned char branco[3] = {255, 255, 255};
                 fwrite(branco, 1, 3, arquivo);
             }
             else
             {
-                // escolhe a cor do objeto com base no seu índice. 
-                int indiceCor = (rotulo - 1) % totalCores;
+                int indiceCor = det->corDoObjeto[rotulo - 1] % totalCores;
                 unsigned char cor[3] = {
-                    cores[indiceCor][0],
-                    cores[indiceCor][1],
-                    cores[indiceCor][2]
+                    (unsigned char)cores[indiceCor][0],
+                    (unsigned char)cores[indiceCor][1],
+                    (unsigned char)cores[indiceCor][2]
                 };
                 fwrite(cor, 1, 3, arquivo);
             }
@@ -153,4 +215,90 @@ void gerarImagemSaida(Imagem *img, Deteccao *det, const char *nomeArquivo)
     }
 
     fclose(arquivo);
+}
+
+static int comparadorArea(const void *a, const void *b)
+{
+    const Objeto *oa = (const Objeto *)a;
+    const Objeto *ob = (const Objeto *)b;
+    if (ob->area > oa->area) return  1;
+    if (ob->area < oa->area) return -1;
+    return 0;
+}
+
+void imprimirListaOrdenada(Deteccao *det)
+{
+    Objeto *sorted = malloc(det->totalObjetos * sizeof(Objeto));
+    memcpy(sorted, det->objetos, det->totalObjetos * sizeof(Objeto));
+    qsort(sorted, det->totalObjetos, sizeof(Objeto), comparadorArea);
+
+    printf("Total de objetos encontrados: %d\n", det->totalObjetos);
+    for (int i = 0; i < det->totalObjetos; i++)
+    {
+        printf("Objeto %d (Posicao x=%d, y=%d): Area = %.1f pixels\n",
+               sorted[i].id, sorted[i].x, sorted[i].y, sorted[i].area);
+    }
+
+    free(sorted);
+}
+
+void gerarImagemMaioresObjetos(Imagem *img, Deteccao *det, const char *nomeArquivo)
+{
+    if (det->totalObjetos == 0) return;
+
+    /* copia e ordena por área decrescente */
+    Objeto *sorted = malloc(det->totalObjetos * sizeof(Objeto));
+    memcpy(sorted, det->objetos, det->totalObjetos * sizeof(Objeto));
+    qsort(sorted, det->totalObjetos, sizeof(Objeto), comparadorArea);
+
+    int n = det->totalObjetos < 3 ? det->totalObjetos : 3;
+
+    int totalLargura = 0;
+    int maxAltura    = 0;
+    for (int k = 0; k < n; k++)
+    {
+        totalLargura += sorted[k].larguraBBox;
+        if (sorted[k].alturaBBox > maxAltura)
+            maxAltura = sorted[k].alturaBBox;
+    }
+
+    FILE *arquivo = fopen(nomeArquivo, "wb");
+    if (!arquivo)
+    {
+        fprintf(stderr, "Erro ao criar arquivo de maiores objetos.\n");
+        free(sorted);
+        return;
+    }
+
+    fprintf(arquivo, "P6\n%d %d\n255\n", totalLargura, maxAltura);
+
+    /* monta o canvas linha a linha */
+    for (int row = 0; row < maxAltura; row++)
+    {
+        for (int k = 0; k < n; k++)
+        {
+            Objeto *obj = &sorted[k];
+            for (int col = 0; col < obj->larguraBBox; col++)
+            {
+                unsigned char pixel[3];
+                int imgRow = obj->minLinha + row;
+                int imgCol = obj->minColuna + col;
+
+                if (row < obj->alturaBBox &&
+                    imgRow < img->altura && imgCol < img->largura &&
+                    obj->mascara[row][col])
+                {
+                    pixel[0] = pixel[1] = pixel[2] = 0; /* objeto = preto */
+                }
+                else
+                {
+                    pixel[0] = pixel[1] = pixel[2] = 255; /* fundo = branco */
+                }
+                fwrite(pixel, 1, 3, arquivo);
+            }
+        }
+    }
+
+    fclose(arquivo);
+    free(sorted);
 }
