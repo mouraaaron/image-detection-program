@@ -9,6 +9,7 @@ OBJS   = ../bin/objetos.o \
 
 tudo: $(OBJS)
 	$(CC) $(FLAGS) -o ../bin/objeto $(OBJS)
+	cp ../bin/objeto ../objeto
 
 ../bin/objetos.o: objetos.c imagens.h deteccao.h fila.h funcoes_aux.h
 	$(CC) $(FLAGS) -c objetos.c -o ../bin/objetos.o
@@ -29,4 +30,4 @@ limpa:
 	rm -f ../bin/*.o
 
 faxina: limpa
-	rm -f ../bin/objeto
+	rm -f ../bin/objeto ../objeto

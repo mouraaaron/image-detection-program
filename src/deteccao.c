@@ -235,7 +235,7 @@ void imprimirListaOrdenada(Deteccao *det)
     printf("Total de objetos encontrados: %d\n", det->totalObjetos);
     for (int i = 0; i < det->totalObjetos; i++)
     {
-        printf("Objeto %d (Posicao x=%d, y=%d): Area = %.1f pixels\n",
+        printf("Objeto %d (Posição x=%d, y=%d): Área = %.1f pixels\n",
                sorted[i].id, sorted[i].x, sorted[i].y, sorted[i].area);
     }
 
