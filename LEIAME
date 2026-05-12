@@ -17,5 +17,18 @@ am25/
    ├── 
    ├── 
    └── 
-  └──LEIAME.txt
+├──fig1p2.pgm
+├──fig1p5.pgm
+└──LEIAME.txt
 
+
+
+## COMO COMPILAR E RODAR?
+
+-> entre na pasta src e rode o comando:
+-> make tudo 
+-> cd ..
+-> ./objeto ...
+
+Para usar os comandos do makefile tem que estar na pasta "src"
+Para usar o ./objeto tem que estar no diretório am25
