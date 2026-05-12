@@ -242,63 +242,72 @@ void imprimirListaOrdenada(Deteccao *det)
     free(sorted);
 }
 
+#define MARGEM 10
+
 void gerarImagemMaioresObjetos(Imagem *img, Deteccao *det, const char *nomeArquivo)
 {
+    (void)img;
     if (det->totalObjetos == 0) return;
 
-    /* copia e ordena por área decrescente */
     Objeto *sorted = malloc(det->totalObjetos * sizeof(Objeto));
     memcpy(sorted, det->objetos, det->totalObjetos * sizeof(Objeto));
     qsort(sorted, det->totalObjetos, sizeof(Objeto), comparadorArea);
 
     int n = det->totalObjetos < 3 ? det->totalObjetos : 3;
 
-    int totalLargura = 0;
+    /* largura total: margem esquerda + (largura + margem) de cada objeto */
+    int totalLargura = MARGEM;
     int maxAltura    = 0;
     for (int k = 0; k < n; k++)
     {
-        totalLargura += sorted[k].larguraBBox;
+        totalLargura += sorted[k].larguraBBox + MARGEM;
         if (sorted[k].alturaBBox > maxAltura)
             maxAltura = sorted[k].alturaBBox;
     }
+    int totalAltura = maxAltura + 2 * MARGEM;
+
+    /* calcula o deslocamento X de cada objeto no canvas */
+    int *xOffset = malloc(n * sizeof(int));
+    xOffset[0] = MARGEM;
+    for (int k = 1; k < n; k++)
+        xOffset[k] = xOffset[k - 1] + sorted[k - 1].larguraBBox + MARGEM;
 
     FILE *arquivo = fopen(nomeArquivo, "wb");
     if (!arquivo)
     {
         fprintf(stderr, "Erro ao criar arquivo de maiores objetos.\n");
+        free(xOffset);
         free(sorted);
         return;
     }
 
-    fprintf(arquivo, "P6\n%d %d\n255\n", totalLargura, maxAltura);
+    fprintf(arquivo, "P6\n%d %d\n255\n", totalLargura, totalAltura);
 
-    /* monta o canvas linha a linha */
-    for (int row = 0; row < maxAltura; row++)
+    for (int row = 0; row < totalAltura; row++)
     {
-        for (int k = 0; k < n; k++)
+        for (int col = 0; col < totalLargura; col++)
         {
-            Objeto *obj = &sorted[k];
-            for (int col = 0; col < obj->larguraBBox; col++)
-            {
-                unsigned char pixel[3];
-                int imgRow = obj->minLinha + row;
-                int imgCol = obj->minColuna + col;
+            unsigned char pixel[3] = {255, 255, 255}; /* branco por padrão */
 
-                if (row < obj->alturaBBox &&
-                    imgRow < img->altura && imgCol < img->largura &&
-                    obj->mascara[row][col])
+            for (int k = 0; k < n; k++)
+            {
+                int objCol = col - xOffset[k];
+                int objRow = row - MARGEM;
+
+                if (objCol >= 0 && objCol < sorted[k].larguraBBox &&
+                    objRow >= 0 && objRow < sorted[k].alturaBBox &&
+                    sorted[k].mascara[objRow][objCol])
                 {
-                    pixel[0] = pixel[1] = pixel[2] = 0; /* objeto = preto */
+                    pixel[0] = pixel[1] = pixel[2] = 0; /* preto */
+                    break;
                 }
-                else
-                {
-                    pixel[0] = pixel[1] = pixel[2] = 255; /* fundo = branco */
-                }
-                fwrite(pixel, 1, 3, arquivo);
             }
+
+            fwrite(pixel, 1, 3, arquivo);
         }
     }
 
     fclose(arquivo);
+    free(xOffset);
     free(sorted);
 }
