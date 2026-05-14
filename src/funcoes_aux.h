@@ -2,6 +2,7 @@
 #define FUNCOES_H
 #include <stdio.h>
 #include <stdlib.h>
+
 #include "imagens.h"
 
 typedef struct {
@@ -11,8 +12,6 @@ typedef struct {
 
 } parametros;
 
-
 int coletarParametros(int argc, char *argv[], parametros *parametros);
-
 
 #endif

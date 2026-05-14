@@ -1,9 +1,9 @@
 #ifndef DETECCAO_H
 #define DETECCAO_H
 #include <stdio.h>
-#include "imagens.h"
-#include "fila.h"
 
+#include "fila.h"
+#include "imagens.h"
 
 typedef struct {
     int id;
@@ -22,7 +22,6 @@ typedef struct {
     int *corDoObjeto;
 } Deteccao;
 
-
 Deteccao *detectarObjetos(Imagem *img);
 
 void liberarDeteccao(Deteccao *det, int altura);
@@ -35,6 +34,5 @@ void gerarImagemSaida(Imagem *img, Deteccao *det, const char *nomeArquivo);
 void gerarImagemMaioresObjetos(Imagem *img, Deteccao *det, const char *nomeArquivo);
 
 void imprimirListaOrdenada(Deteccao *det);
-
 
 #endif

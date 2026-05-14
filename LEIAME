@@ -6,7 +6,9 @@ GRR: 20255804
 am25/
 │
 ├── bin/
-│   └── 
+│   └── arquivos .o são mandandos para o bin 
+├── clang-format
+│   └── formatação dos arquivos estilo GOOGLE (4 espaços)
 │
 ├── src/
    ├──

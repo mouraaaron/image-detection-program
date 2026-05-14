@@ -2,13 +2,12 @@
 #define FILA_H
 #include <stdio.h>
 
-
 typedef struct {
     int *linhas;
     int *colunas;
     int inicio;
     int fim;
-} Fila; //vai ser usado para o flood fill 
+} Fila;  // vai ser usado para o flood fill
 
 Fila *criarFila(int tamanho);
 
