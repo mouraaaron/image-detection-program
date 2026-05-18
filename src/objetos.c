@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
     imprimirListaOrdenada(det);
 
     if (params.terArq[0] != NULL) 
-        gerarImagemMaioresObjetos(imagem, det, params.terArq[0]);
+        gerarImagemMaioresObjetos(det, params.terArq[0]);
 
     liberarDeteccao(det, imagem->altura);
     liberarImagem(imagem);

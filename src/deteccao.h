@@ -31,7 +31,7 @@ int floodFill(Imagem *img, int **rotulos, int linhaInicial, int colunaInicial, i
 
 void gerarImagemSaida(Imagem *img, Deteccao *det, const char *nomeArquivo);
 
-void gerarImagemMaioresObjetos(Imagem *img, Deteccao *det, const char *nomeArquivo);
+void gerarImagemMaioresObjetos(Deteccao *det, const char *nomeArquivo);
 
 void imprimirListaOrdenada(Deteccao *det);
 

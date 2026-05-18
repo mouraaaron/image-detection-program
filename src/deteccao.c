@@ -151,15 +151,15 @@ Deteccao *detectarObjetos(Imagem *img) {
 
     for (int i = 0; i < det->totalObjetos; i++) {
 
-        if (det->corDoObjeto[i] != -1){
+        if (det->corDoObjeto[i] == -1) {
             det->corDoObjeto[i] = proximaCor;
             for (int j = i + 1; j < det->totalObjetos; j++) {
                 if (det->corDoObjeto[j] == -1 && (objetosIguais(&det->objetos[i], &det->objetos[j]) != 0))
                     det->corDoObjeto[j] = proximaCor;
-                }
+            }
+            //dá uma cor para um objeto. procura por objetos iguais; dá a mesma cor para eles caso forem iguais
+            proximaCor++;
         }
-        //dá uma cor para um objeto. procura por objetos iguais; dá a mesma cor para eles caso forem iguais
-        proximaCor++;
     }
 
     return det;
@@ -177,7 +177,7 @@ void liberarDeteccao(Deteccao *det, int altura) {
     free(det);
 }
 
-static int cores[][3] = {
+int cores[][3] = {
     {220, 20, 20},  // vermelho escuro
     {0, 180, 0},    // verde
     {0, 0, 220},    // azul
@@ -187,7 +187,22 @@ static int cores[][3] = {
     {255, 128, 0},  // laranja
     {128, 0, 255},  // roxo
 };
-static int totalCores = 8;
+// tem 8 cores predefinidas. Caso exceda 8 objetos, sao geradas cores aleatórias. 
+int totalCores = 8;
+
+void obterCor(int indiceCor, char *r, char *g, char *b) {
+    if (indiceCor < totalCores) {
+        *r = (char)cores[indiceCor][0];
+        *g = (char)cores[indiceCor][1];
+        *b = (char)cores[indiceCor][2];
+    } else {
+        // acima de 8 objetos, gera cores aleatórias. 
+        srand((int)(indiceCor * 7919 + 1));
+        *r = (char)(rand() % 200 + 55);
+        *g = (char)(rand() % 200 + 55);
+        *b = (char)(rand() % 200 + 55);
+    }
+}
 
 void gerarImagemSaida(Imagem *img, Deteccao *det, const char *nomeArquivo) {
     FILE *arquivo = fopen(nomeArquivo, "wb");
@@ -202,13 +217,13 @@ void gerarImagemSaida(Imagem *img, Deteccao *det, const char *nomeArquivo) {
         for (int j = 0; j < img->largura; j++) {
             int rotulo = det->rotulos[i][j];
             if (rotulo == 0) {
-                unsigned char branco[3] = {255, 255, 255};
+                char branco[3] = {255, 255, 255};
                 fwrite(branco, 1, 3, arquivo);
             } else {
-                int indiceCor = det->corDoObjeto[rotulo - 1] % totalCores;
-                unsigned char cor[3] = {(unsigned char)cores[indiceCor][0],
-                                        (unsigned char)cores[indiceCor][1],
-                                        (unsigned char)cores[indiceCor][2]};
+                int indiceCor = det->corDoObjeto[rotulo - 1];
+                char r, g, b;
+                obterCor(indiceCor, &r, &g, &b);
+                char cor[3] = {r, g, b};
                 fwrite(cor, 1, 3, arquivo);
             }
         }
@@ -220,81 +235,111 @@ void gerarImagemSaida(Imagem *img, Deteccao *det, const char *nomeArquivo) {
 int comparadorArea(const void *a, const void *b) {
     const Objeto *oa = (const Objeto *)a;
     const Objeto *ob = (const Objeto *)b;
-    if (ob->area > oa->area) return 1;
-    if (ob->area < oa->area) return -1;
+    if (ob->area > oa->area)
+        return 1;
+    if (ob->area < oa->area)
+        return -1;
     return 0;
 }
 
 void imprimirListaOrdenada(Deteccao *det) {
     Objeto *sorted = malloc(det->totalObjetos * sizeof(Objeto));
-    memcpy(sorted, det->objetos, det->totalObjetos * sizeof(Objeto));
-    qsort(sorted, det->totalObjetos, sizeof(Objeto), comparadorArea);
 
+    for(int i = 0; i < det->totalObjetos; i++)
+        sorted[i] = det->objetos[i];
+
+    // ordena por área decrescente usando qsort nativo
+    qsort(sorted, det->totalObjetos, sizeof(Objeto), comparadorArea);
+    
     printf("Total de objetos encontrados: %d\n", det->totalObjetos);
     for (int i = 0; i < det->totalObjetos; i++) {
-        printf("Objeto %d (Posição x=%d, y=%d): Área = %.1f pixels\n", sorted[i].id, sorted[i].x,
-               sorted[i].y, sorted[i].area);
+        printf("Objeto %d (Posição x=%d, y=%d): Área = %.1f pixels\n", sorted[i].id, sorted[i].x, sorted[i].y, sorted[i].area);
     }
 
     free(sorted);
 }
 
 #define MARGEM 10
+// os objetos da ImagemMaioresObjetos estavam encostando um no outro, dificultando visualização. Por isso a MARGEM 10
 
-void gerarImagemMaioresObjetos(Imagem *img, Deteccao *det, const char *nomeArquivo) {
-    (void)img;
-    if (det->totalObjetos == 0) return;
+void gerarImagemMaioresObjetos(Deteccao *det, const char *nomeArquivo) {
+    if (det->totalObjetos == 0) 
+        return;
 
+    // copia o array de objetos 
     Objeto *sorted = malloc(det->totalObjetos * sizeof(Objeto));
-    memcpy(sorted, det->objetos, det->totalObjetos * sizeof(Objeto));
+    
+    for (int i = 0; i < det->totalObjetos; i++) {
+        sorted[i] = det->objetos[i];
+    }
+
+    // ordena por área decrescente usando qsort nativo
     qsort(sorted, det->totalObjetos, sizeof(Objeto), comparadorArea);
 
-    int n = det->totalObjetos < 3 ? det->totalObjetos : 3;
 
-    /* largura total: margem esquerda + (largura + margem) de cada objeto */
+    // número de objetos a exibir (máximo 3) 
+    int n;
+    if (det->totalObjetos < 3)
+        n = det->totalObjetos;
+    else
+        n = 3;
+
+    // largura total: margem esquerda + largura + margem direita de cada objeto 
     int totalLargura = MARGEM;
     int maxAltura = 0;
     for (int k = 0; k < n; k++) {
-        totalLargura += sorted[k].larguraBBox + MARGEM;
-        if (sorted[k].alturaBBox > maxAltura) maxAltura = sorted[k].alturaBBox;
+        totalLargura = totalLargura + sorted[k].larguraBBox + MARGEM;
+        if (sorted[k].alturaBBox > maxAltura)
+            maxAltura = sorted[k].alturaBBox;
     }
-    int totalAltura = maxAltura + 2 * MARGEM;
+    int totalAltura = maxAltura + 2 * MARGEM; //altura da imagem vai ser altura do maior objeto + margem superior e inferior
 
-    /* calcula o deslocamento X de cada objeto no canvas */
-    int *xOffset = malloc(n * sizeof(int));
-    xOffset[0] = MARGEM;
-    for (int k = 1; k < n; k++) xOffset[k] = xOffset[k - 1] + sorted[k - 1].larguraBBox + MARGEM;
+    // calcula o deslocamento horizontal de cada objeto na imagem de saísa 
+    int *deslocamento = malloc(n * sizeof(int));
 
-    FILE *arquivo = fopen(nomeArquivo, "wb");
-    if (!arquivo) {
+    deslocamento[0] = MARGEM;
+    for (int k = 1; k < n; k++) {
+        deslocamento[k] = deslocamento[k - 1] + sorted[k - 1].larguraBBox + MARGEM;
+    }
+    //acima, o deslocamento do segundo objeto é a posição do primeiro + largura do primeiro + margem. 
+
+    FILE *arquivo = fopen(nomeArquivo, "wb"); //wb = write binary
+
+    if (arquivo == NULL) {
         fprintf(stderr, "Erro ao criar arquivo de maiores objetos.\n");
-        free(xOffset);
+        free(deslocamento);
         free(sorted);
         return;
     }
 
     fprintf(arquivo, "P6\n%d %d\n255\n", totalLargura, totalAltura);
 
-    for (int row = 0; row < totalAltura; row++) {
+    for (int linha = 0; linha < totalAltura; linha++) {
         for (int col = 0; col < totalLargura; col++) {
-            unsigned char pixel[3] = {255, 255, 255}; /* branco por padrão */
-
+            unsigned char pixel[3];
+            pixel[0] = 255;
+            pixel[1] = 255;
+            pixel[2] = 255;
+            
             for (int k = 0; k < n; k++) {
-                int objCol = col - xOffset[k];
-                int objRow = row - MARGEM;
+                int objCol = col - deslocamento[k];
+                int objlinha = linha - MARGEM;
 
-                if (objCol >= 0 && objCol < sorted[k].larguraBBox && objRow >= 0 &&
-                    objRow < sorted[k].alturaBBox && sorted[k].mascara[objRow][objCol]) {
-                    pixel[0] = pixel[1] = pixel[2] = 0; /* preto */
+                if (objCol >= 0 && objCol < sorted[k].larguraBBox && objlinha >= 0 && objlinha < sorted[k].alturaBBox &&
+                    sorted[k].mascara[objlinha][objCol] == 1) {
+                    pixel[0] = 0;
+                    pixel[1] = 0;
+                    pixel[2] = 0;
                     break;
+                    // se o pixel pertence a um objeto, ele é preto 
                 }
             }
-
+        // para cada pixel, assume que é branco. Verifica se pertence a um objeto. Se pertencer, pinta de preto. 
             fwrite(pixel, 1, 3, arquivo);
         }
     }
 
     fclose(arquivo);
-    free(xOffset);
+    free(deslocamento);
     free(sorted);
 }
